@@ -6,6 +6,8 @@
 #include "php_text.h"
 #include "ext/standard/info.h"
 
+#include "unicode/unorm2.h"
+
 #ifdef COMPILE_DL_TEXT
 ZEND_GET_MODULE(text)
 #endif
@@ -86,6 +88,33 @@ static bool php_text_init_from_utf8_string(php_text_obj *textobj, const char *te
 	return true;
 }
 
+static bool php_text_normalize(php_text_obj *textobj)
+{
+	UErrorCode error = U_ZERO_ERROR;
+	const UNormalizer2 *nfc = unorm2_getNFCInstance(&error);
+	UChar *converted = NULL;
+	int32_t new_len = 0;
+
+	/* Todo: loop in case space is not enough */
+	converted = ecalloc(sizeof(UChar), textobj->text_len * 2 + 1);
+
+	/* Normalize */
+	new_len = unorm2_normalize(nfc, textobj->text, textobj->text_len, converted, textobj->text_len * 2, &error);
+
+	/* Replace if OK */
+	if (error == U_ZERO_ERROR) {
+		efree(textobj->text);
+		textobj->text = converted;
+		textobj->text_len = new_len;
+
+		return true;
+	}
+
+	efree(converted);
+	zend_value_error(u_errorName(error));
+	return false;
+}
+
 static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *text_str_len)
 {
 	UErrorCode  error    = U_ZERO_ERROR;
@@ -138,7 +167,12 @@ PHP_METHOD(Text, __construct)
 		Z_PARAM_STRING(collation_str, collation_str_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	php_text_init_from_utf8_string(Z_PHPTEXT_P(ZEND_THIS), text_str, text_str_len);
+	if (!php_text_init_from_utf8_string(Z_PHPTEXT_P(ZEND_THIS), text_str, text_str_len)) {
+		RETURN_THROWS();
+	}
+	if (!php_text_normalize(Z_PHPTEXT_P(ZEND_THIS))) {
+		RETURN_THROWS();
+	}
 }
 
 PHP_METHOD(Text, __toString)
@@ -166,6 +200,7 @@ PHP_MINIT_FUNCTION(text)
 
 PHP_MSHUTDOWN_FUNCTION(text)
 {
+	u_cleanup();
 }
 
 PHP_RINIT_FUNCTION(text)
