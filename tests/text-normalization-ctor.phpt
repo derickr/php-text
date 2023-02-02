@@ -18,6 +18,7 @@ $strings = [
 	"\u{fb2e}"          => "\u{05d0}\u{05bf}",
 	"\u{fb2e}\u{fb38}"  => "\u{05d0}\u{05bf}\u{05d8}\u{05bc}",
 	"\u{01d161}"        => "\u{01d158}\u{01d165}\u{01d16f}",
+	"\u{feff}BOM"       => "\u{feff}BOM",
 ];
 
 foreach ($strings as $input => $output)
@@ -64,3 +65,7 @@ Expected:                           אֿטּ (d790d6bfd798d6bc)
 Created Text object:                𝅘𝅥𝅯 (f09d85a1)
 Displaying string-cast Text object: 𝅘𝅥𝅯 (f09d8598f09d85a5f09d85af)
 Expected:                           𝅘𝅥𝅯 (f09d8598f09d85a5f09d85af)
+
+Created Text object:                ﻿BOM (efbbbf424f4d)
+Displaying string-cast Text object: ﻿BOM (efbbbf424f4d)
+Expected:                           ﻿BOM (efbbbf424f4d)
