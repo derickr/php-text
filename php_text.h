@@ -4,6 +4,7 @@
 #include "php.h"
 
 #include "unicode/ustring.h"
+#include "unicode/ucol.h"
 
 extern zend_module_entry text_module_entry;
 #define phpext_text_ptr &text_module_entry
@@ -26,6 +27,7 @@ typedef struct _php_text_obj php_text_obj;
 struct _php_text_obj {
 	UChar        *text;
 	int32_t       text_len; /* Without trailing \0 */
+	UCollator    *collation;
 	zend_object   std;
 };
 

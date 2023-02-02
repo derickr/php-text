@@ -38,6 +38,9 @@ static void text_object_free_storage_text(zend_object *object) /* {{{ */
 	if (intern->text) {
 		efree(intern->text);
 	}
+	if (intern->collation) {
+		ucol_close(intern->collation);
+	}
 
 	zend_object_std_dtor(&intern->std);
 } /* }}} */
@@ -188,10 +191,37 @@ static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *tex
 	return true;
 }
 
+static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)
+{
+	UErrorCode error = U_ZERO_ERROR;
+
+	textobj->collation = ucol_open(collation, &error);
+	if (U_FAILURE(error)) {
+		zend_value_error("Can't open collation '%s': %s", collation, u_errorName(error));
+		return false;
+	}
+
+	return true;
+}
+
+static bool php_text_clone_locale(php_text_obj *textobj, zend_object *object)
+{
+	UErrorCode error = U_ZERO_ERROR;
+	php_text_obj *old_obj = php_text_obj_from_obj(object);
+
+	textobj->collation = ucol_clone(old_obj->collation, &error);
+	if (U_FAILURE(error)) {
+		zend_value_error("Can't clone collation: %s", u_errorName(error));
+		return false;
+	}
+
+	return true;
+}
+
 PHP_METHOD(Text, __construct)
 {
 	zval   *z_text_str;
-	char   *collation_str = "root/standard";
+	char   *collation_str = "root";
 	size_t  collation_str_len = 0;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
@@ -208,10 +238,16 @@ PHP_METHOD(Text, __construct)
 			if (!php_text_normalize(Z_PHPTEXT_P(ZEND_THIS))) {
 				RETURN_THROWS();
 			}
+			if (!php_text_attach_locale(Z_PHPTEXT_P(ZEND_THIS), collation_str)) {
+				RETURN_THROWS();
+			}
 			break;
 
 		case IS_OBJECT:
 			if (!php_text_init_from_text(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
+				RETURN_THROWS();
+			}
+			if (!php_text_clone_locale(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
 				RETURN_THROWS();
 			}
 			break;
@@ -221,8 +257,6 @@ PHP_METHOD(Text, __construct)
 			RETURN_THROWS();
 		}
 	}
-
-	/* Do locale handling */
 }
 
 PHP_METHOD(Text, __toString)
