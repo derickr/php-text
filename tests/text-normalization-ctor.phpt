@@ -15,6 +15,9 @@ $strings = [
 	"\u{2126}"          => "\u{03a9}",
 	"\u{1e0b}\u{0323}"  => "\u{1e0d}\u{0307}",
 	"q\u{0307}\u{0323}" => "q\u{0323}\u{0307}",
+	"\u{fb2e}"          => "\u{05d0}\u{05bf}",
+	"\u{fb2e}\u{fb38}"  => "\u{05d0}\u{05bf}\u{05d8}\u{05bc}",
+	"\u{01d161}"        => "\u{01d158}\u{01d165}\u{01d16f}",
 ];
 
 foreach ($strings as $input => $output)
@@ -49,3 +52,15 @@ Expected:                           ḍ̇ (e1b88dcc87)
 Created Text object:                q̣̇ (71cc87cca3)
 Displaying string-cast Text object: q̣̇ (71cca3cc87)
 Expected:                           q̣̇ (71cca3cc87)
+
+Created Text object:                אַ (efacae)
+Displaying string-cast Text object: אַ (d790d6b7)
+Expected:                           אֿ (d790d6bf)
+
+Created Text object:                אַטּ (efacaeefacb8)
+Displaying string-cast Text object: אַטּ (d790d6b7d798d6bc)
+Expected:                           אֿטּ (d790d6bfd798d6bc)
+
+Created Text object:                𝅘𝅥𝅯 (f09d85a1)
+Displaying string-cast Text object: 𝅘𝅥𝅯 (f09d8598f09d85a5f09d85af)
+Expected:                           𝅘𝅥𝅯 (f09d8598f09d85a5f09d85af)

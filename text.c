@@ -95,11 +95,11 @@ static bool php_text_normalize(php_text_obj *textobj)
 	UChar *converted = NULL;
 	int32_t new_len = 0;
 
-	/* Todo: loop in case space is not enough */
-	converted = ecalloc(sizeof(UChar), textobj->text_len * 2 + 1);
+	/* Assume that by default normalisation to NFC does not increase the number of code points */
+	converted = ecalloc(sizeof(UChar), textobj->text_len + 1);
 
 	/* Normalize */
-	new_len = unorm2_normalize(nfc, textobj->text, textobj->text_len, converted, textobj->text_len * 2, &error);
+	new_len = unorm2_normalize(nfc, textobj->text, textobj->text_len, converted, textobj->text_len, &error);
 
 	/* Replace if OK */
 	if (error == U_ZERO_ERROR) {
@@ -110,9 +110,32 @@ static bool php_text_normalize(php_text_obj *textobj)
 		return true;
 	}
 
+	/* If there isn't a buffer size issue, bail */
+	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
+		efree(converted);
+		zend_value_error(u_errorName(error));
+		return false;
+	}
+
+	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
 	efree(converted);
-	zend_value_error(u_errorName(error));
-	return false;
+
+	converted = ecalloc(sizeof(UChar), new_len + 1);
+	error = U_ZERO_ERROR;
+
+	new_len = unorm2_normalize(nfc, textobj->text, textobj->text_len, converted, new_len + 1, &error);
+
+	if (U_FAILURE(error)) {
+		efree(converted);
+		zend_value_error(u_errorName(error));
+		return false;
+	}
+
+	efree(textobj->text);
+	textobj->text = converted;
+	textobj->text_len = new_len;
+
+	return true;
 }
 
 static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *text_str_len)
