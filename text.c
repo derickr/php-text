@@ -42,7 +42,18 @@ static void text_object_free_storage_text(zend_object *object) /* {{{ */
 	zend_object_std_dtor(&intern->std);
 } /* }}} */
 
-static bool php_text_init_from_utf8_string(php_text_obj *textobj, const char *text_str, size_t text_str_len)
+static bool php_text_init_from_text(php_text_obj *new_obj, zend_object *object)
+{
+	php_text_obj *old_obj = php_text_obj_from_obj(object);
+
+	new_obj->text = ecalloc(sizeof(UChar), old_obj->text_len + 1);
+	memcpy(new_obj->text, old_obj->text, old_obj->text_len * sizeof(UChar));
+	new_obj->text_len = old_obj->text_len;
+
+	return true;
+}
+
+static bool php_text_init_from_utf8_string(php_text_obj *textobj, const zend_string *text_str)
 {
 	UErrorCode error    = U_ZERO_ERROR;
 	int32_t    dest_len = 0;
@@ -52,10 +63,10 @@ static bool php_text_init_from_utf8_string(php_text_obj *textobj, const char *te
 	}
 
 	/* Allocate — guess that the buffer is the length of text_str_len + \0 */
-	textobj->text = ecalloc(sizeof(UChar),  text_str_len + 1);
+	textobj->text = ecalloc(sizeof(UChar),  ZSTR_LEN(text_str) + 1);
 
 	/* Preflighting */
-	u_strFromUTF8(textobj->text, text_str_len + 1, &dest_len, text_str, text_str_len, &error);
+	u_strFromUTF8(textobj->text, ZSTR_LEN(text_str) + 1, &dest_len, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
 
 	if (error == U_ZERO_ERROR) {
 		textobj->text_len = dest_len;
@@ -73,7 +84,7 @@ static bool php_text_init_from_utf8_string(php_text_obj *textobj, const char *te
 	textobj->text = ecalloc(sizeof(UChar), dest_len + 1);
 	error = U_ZERO_ERROR;
 
-	u_strFromUTF8(textobj->text, text_str_len + 1, NULL, text_str, text_str_len, &error);
+	u_strFromUTF8(textobj->text, ZSTR_LEN(text_str) + 1, NULL, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
 
 	if (U_FAILURE(error)) {
 		efree(textobj->text);
@@ -179,23 +190,39 @@ static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *tex
 
 PHP_METHOD(Text, __construct)
 {
-	char   *text_str = NULL;
-	size_t  text_str_len = 0;
+	zval   *z_text_str;
 	char   *collation_str = "root/standard";
 	size_t  collation_str_len = 0;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
-		Z_PARAM_STRING(text_str, text_str_len)
+		Z_PARAM_ZVAL(z_text_str)
 		Z_PARAM_OPTIONAL
 		Z_PARAM_STRING(collation_str, collation_str_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!php_text_init_from_utf8_string(Z_PHPTEXT_P(ZEND_THIS), text_str, text_str_len)) {
-		RETURN_THROWS();
+	switch (Z_TYPE_P(z_text_str)) {
+		case IS_STRING:
+			if (!php_text_init_from_utf8_string(Z_PHPTEXT_P(ZEND_THIS), Z_STR_P(z_text_str))) {
+				RETURN_THROWS();
+			}
+			if (!php_text_normalize(Z_PHPTEXT_P(ZEND_THIS))) {
+				RETURN_THROWS();
+			}
+			break;
+
+		case IS_OBJECT:
+			if (!php_text_init_from_text(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
+				RETURN_THROWS();
+			}
+			break;
+
+		default: {
+			zend_argument_error(NULL, 1, "must be a valid string or Text object");
+			RETURN_THROWS();
+		}
 	}
-	if (!php_text_normalize(Z_PHPTEXT_P(ZEND_THIS))) {
-		RETURN_THROWS();
-	}
+
+	/* Do locale handling */
 }
 
 PHP_METHOD(Text, __toString)
