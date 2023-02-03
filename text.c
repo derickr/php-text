@@ -14,6 +14,9 @@ ZEND_GET_MODULE(text)
 
 #include "php_text_arginfo.h"
 
+#define DISPLAY_LOCALE "en_US"
+#define DEFAULT_LOCALE "root"
+
 ZEND_DECLARE_MODULE_GLOBALS(text)
 
 static zend_object_handlers text_object_handlers_text;
@@ -230,10 +233,80 @@ static bool php_text_clone_locale(php_text_obj *textobj, zend_object *object)
 	return true;
 }
 
+#define MAX_COLLATION_DISPLAY_NAME 256
+
+static void text_object_to_hash(php_text_obj *textobj, HashTable *props)
+{
+	zval       zv;
+	char      *text_str;
+	size_t     text_len_str;
+	UChar     *display_buffer;
+	int32_t    display_buffer_len;
+	UErrorCode error = U_ZERO_ERROR;
+
+	if (!php_text_to_utf8(textobj, &text_str, &text_len_str)) {
+		return;
+	}
+
+	/* The text */
+	ZVAL_STRING(&zv, text_str);
+	zend_hash_str_update(props, "text", sizeof("text")-1, &zv);
+	efree(text_str);
+
+	/* The locale */
+	display_buffer = ecalloc(sizeof(UChar), MAX_COLLATION_DISPLAY_NAME + 1);
+	display_buffer_len = ucol_getDisplayName(textobj->collation_name, DISPLAY_LOCALE, display_buffer, MAX_COLLATION_DISPLAY_NAME, &error);
+
+	if (U_FAILURE(error) || error == U_STRING_NOT_TERMINATED_WARNING) {
+		zend_value_error(u_errorName(error));
+		efree(display_buffer);
+		return;
+	}
+
+	if (!php_uchar_to_utf8(display_buffer, display_buffer_len, &text_str, &text_len_str)) {
+		efree(display_buffer);
+		return;
+	}
+
+	ZVAL_STRING(&zv, text_str);
+	zend_hash_str_update(props, "collation", sizeof("collation")-1, &zv);
+
+	efree(display_buffer);
+	efree(text_str);
+}
+
+
+static HashTable *text_object_get_properties_for(zend_object *object, zend_prop_purpose purpose)
+{
+	HashTable *props;
+	php_text_obj *textobj;
+
+	switch (purpose) {
+		case ZEND_PROP_PURPOSE_DEBUG:
+		case ZEND_PROP_PURPOSE_SERIALIZE:
+		case ZEND_PROP_PURPOSE_VAR_EXPORT:
+		case ZEND_PROP_PURPOSE_JSON:
+		case ZEND_PROP_PURPOSE_ARRAY_CAST:
+			break;
+		default:
+			return zend_std_get_properties_for(object, purpose);
+	}
+
+	textobj = php_text_obj_from_obj(object);
+	props = zend_array_dup(zend_std_get_properties(object));
+	if (!textobj->text) {
+		return props;
+	}
+
+	text_object_to_hash(textobj, props);
+
+	return props;
+}
+
 PHP_METHOD(Text, __construct)
 {
 	zval   *z_text_str;
-	char   *collation_str = "root";
+	char   *collation_str = DEFAULT_LOCALE;
 	size_t  collation_str_len = 0;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
@@ -292,6 +365,7 @@ PHP_MINIT_FUNCTION(text)
 	memcpy(&text_object_handlers_text, &std_object_handlers, sizeof(zend_object_handlers));
 	text_object_handlers_text.offset = XtOffsetOf(php_text_obj, std);
 	text_object_handlers_text.free_obj = text_object_free_storage_text;
+	text_object_handlers_text.get_properties_for = text_object_get_properties_for;
 }
 
 PHP_MSHUTDOWN_FUNCTION(text)
