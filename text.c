@@ -38,8 +38,11 @@ static void text_object_free_storage_text(zend_object *object) /* {{{ */
 	if (intern->text) {
 		efree(intern->text);
 	}
-	if (intern->collation) {
-		ucol_close(intern->collation);
+	if (intern->collation_name) {
+		efree(intern->collation_name);
+	}
+	if (intern->collation_obj) {
+		ucol_close(intern->collation_obj);
 	}
 
 	zend_object_std_dtor(&intern->std);
@@ -200,11 +203,13 @@ static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)
 {
 	UErrorCode error = U_ZERO_ERROR;
 
-	textobj->collation = ucol_open(collation, &error);
+	textobj->collation_obj = ucol_open(collation, &error);
 	if (U_FAILURE(error)) {
 		zend_value_error("Can't open collation '%s': %s", collation, u_errorName(error));
 		return false;
 	}
+
+	textobj->collation_name = estrdup(collation);
 
 	return true;
 }
@@ -214,11 +219,13 @@ static bool php_text_clone_locale(php_text_obj *textobj, zend_object *object)
 	UErrorCode error = U_ZERO_ERROR;
 	php_text_obj *old_obj = php_text_obj_from_obj(object);
 
-	textobj->collation = ucol_clone(old_obj->collation, &error);
+	textobj->collation_obj = ucol_clone(old_obj->collation_obj, &error);
 	if (U_FAILURE(error)) {
 		zend_value_error("Can't clone collation: %s", u_errorName(error));
 		return false;
 	}
+
+	textobj->collation_name = estrdup(old_obj->collation_name);
 
 	return true;
 }

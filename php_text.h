@@ -27,7 +27,8 @@ typedef struct _php_text_obj php_text_obj;
 struct _php_text_obj {
 	UChar        *text;
 	int32_t       text_len; /* Without trailing \0 */
-	UCollator    *collation;
+	char         *collation_name;
+	UCollator    *collation_obj;
 	zend_object   std;
 };
 
