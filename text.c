@@ -361,6 +361,64 @@ PHP_METHOD(Text, __toString)
 	efree(converted);
 }
 
+PHP_METHOD(Text, concat)
+{
+	int      argc, i;
+	zval    *args = NULL;
+	zval    *arg;
+	int32_t  buffer_size_needed = 0;
+	UChar   *concat_text;
+
+	ZEND_PARSE_PARAMETERS_START(0, -1)
+		Z_PARAM_VARIADIC('*', args, argc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (argc == 0) {
+		zend_string *tmp_string = zend_string_init("", 0, 0);
+
+		object_init_ex(return_value, text_ce);
+
+		php_text_init_from_utf8_string(Z_PHPTEXT_P(return_value), tmp_string);
+		php_text_attach_locale(Z_PHPTEXT_P(return_value), DEFAULT_LOCALE);
+
+		zend_string_release(tmp_string);
+		return;
+	}
+
+	/* Loop for type check and buffer size allocation */
+	for (i = 0; i < argc; i++) {
+		zval *arg = args + i;
+
+		if (Z_TYPE_P(arg) != IS_OBJECT || !instanceof_function(Z_OBJ_P(arg)->ce, text_ce)) {
+			zend_argument_type_error(i + 1, "must be of class Text, %s given", zend_zval_value_name(arg));
+			RETURN_THROWS();
+		}
+
+		buffer_size_needed += Z_PHPTEXT_P(arg)->text_len;
+	}
+
+	/* Allocate */
+	concat_text = ecalloc(sizeof(UChar), buffer_size_needed + 1);
+
+	/* Loop to concat */
+	int32_t  start_pos = 0;
+	for (i = 0; i < argc; i++) {
+		zval    *arg = args + i;
+
+		memcpy((char*) concat_text + start_pos, Z_PHPTEXT_P(arg)->text, Z_PHPTEXT_P(arg)->text_len * sizeof(UChar));
+		start_pos += (Z_PHPTEXT_P(arg)->text_len * sizeof(UChar));
+	}
+
+	object_init_ex(return_value, text_ce);
+	Z_PHPTEXT_P(return_value)->text = concat_text;
+	Z_PHPTEXT_P(return_value)->text_len = buffer_size_needed;
+	php_text_clone_locale(Z_PHPTEXT_P(return_value), Z_OBJ_P(args));
+
+	if (!php_text_normalize(Z_PHPTEXT_P(return_value))) {
+		RETURN_THROWS();
+	}
+}
+
 PHP_MINIT_FUNCTION(text)
 {
 	text_ce = register_class_Text();
