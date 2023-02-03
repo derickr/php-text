@@ -152,16 +152,16 @@ static bool php_text_normalize(php_text_obj *textobj)
 	return true;
 }
 
-static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *text_str_len)
+static bool php_uchar_to_utf8(UChar *input, int32_t input_len, char **text_str, size_t *text_str_len)
 {
 	UErrorCode  error    = U_ZERO_ERROR;
 	int32_t     dest_len = 0;
 
 	/* Allocate — guess that the buffer is the length of text->str_len + \0 */
-	*text_str = ecalloc(1, textobj->text_len + 1);
+	*text_str = ecalloc(1, input_len + 1);
 
 	/* Preflighting */
-	u_strToUTF8(*text_str, textobj->text_len + 1, &dest_len, textobj->text, textobj->text_len, &error);
+	u_strToUTF8(*text_str, input_len + 1, &dest_len, input, input_len, &error);
 
 	if (error == U_ZERO_ERROR) {
 		*text_str_len = dest_len;
@@ -180,7 +180,7 @@ static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *tex
 	*text_str = ecalloc(sizeof(UChar), dest_len + 1);
 	error = U_ZERO_ERROR;
 
-	u_strToUTF8(*text_str, dest_len, NULL, textobj->text, textobj->text_len, &error);
+	u_strToUTF8(*text_str, dest_len, NULL, input, input_len, &error);
 	if (U_FAILURE(error)) {
 		efree(*text_str);
 		return false;
@@ -189,6 +189,11 @@ static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *tex
 	*text_str_len = dest_len;
 
 	return true;
+}
+
+static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *text_str_len)
+{
+	return php_uchar_to_utf8(textobj->text, textobj->text_len, text_str, text_str_len);
 }
 
 static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)
