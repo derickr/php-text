@@ -306,7 +306,7 @@ static HashTable *text_object_get_properties_for(zend_object *object, zend_prop_
 PHP_METHOD(Text, __construct)
 {
 	zval   *z_text_str;
-	char   *collation_str = DEFAULT_LOCALE;
+	char   *collation_str = NULL;
 	size_t  collation_str_len = 0;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
@@ -323,7 +323,7 @@ PHP_METHOD(Text, __construct)
 			if (!php_text_normalize(Z_PHPTEXT_P(ZEND_THIS))) {
 				RETURN_THROWS();
 			}
-			if (!php_text_attach_locale(Z_PHPTEXT_P(ZEND_THIS), collation_str)) {
+			if (!php_text_attach_locale(Z_PHPTEXT_P(ZEND_THIS), collation_str ? collation_str : DEFAULT_LOCALE)) {
 				RETURN_THROWS();
 			}
 			break;
@@ -332,7 +332,11 @@ PHP_METHOD(Text, __construct)
 			if (!php_text_init_from_text(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
 				RETURN_THROWS();
 			}
-			if (!php_text_clone_locale(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
+			if (collation_str) {
+				if (!php_text_attach_locale(Z_PHPTEXT_P(ZEND_THIS), collation_str)) {
+					RETURN_THROWS();
+				}
+			} else if (!php_text_clone_locale(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
 				RETURN_THROWS();
 			}
 			break;
