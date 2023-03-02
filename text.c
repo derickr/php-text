@@ -22,6 +22,135 @@ ZEND_DECLARE_MODULE_GLOBALS(text)
 static zend_object_handlers text_object_handlers_text;
 zend_class_entry *text_ce;
 
+/* Forward declarations */
+static void php_icu_text_dtor(struct _php_icu_text *t);
+
+
+static struct _php_icu_text* php_icu_text_ctor_from_zstring(const zend_string *text_str, UErrorCode *ret_error)
+{
+	UErrorCode            error    = U_ZERO_ERROR;
+	int32_t               dest_len = 0;
+
+	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
+	new->ref_count++;
+
+	/* Allocate — guess that the buffer is the length of text_str_len + \0 */
+	new->val = ecalloc(sizeof(UChar), ZSTR_LEN(text_str) + 1);
+
+	/* Preflighting */
+	u_strFromUTF8(new->val, ZSTR_LEN(text_str) + 1, &dest_len, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
+
+	if (error == U_ZERO_ERROR) {
+		new->len = dest_len;
+		return new;
+	}
+
+	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
+		php_icu_text_dtor(new);
+		*ret_error = error;
+		return NULL;
+	}
+
+	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
+	efree(new->val);
+
+	new->val = ecalloc(sizeof(UChar), dest_len + 1);
+	error = U_ZERO_ERROR;
+
+	u_strFromUTF8(new->val, ZSTR_LEN(text_str) + 1, NULL, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
+
+	if (U_FAILURE(error)) {
+		php_icu_text_dtor(new);
+		*ret_error = error;
+		return NULL;
+	}
+
+	new->len = dest_len;
+
+	return new;
+}
+
+static struct _php_icu_text* php_icu_text_ctor_from_uchar(UChar *val, int32_t len)
+{
+	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
+	new->ref_count++;
+
+	new->val = val;
+	new->len = len;
+
+	return new;
+}
+
+static struct _php_icu_text* php_icu_text_ctor_from_text_normalize(struct _php_icu_text *old, UErrorCode *ret_error)
+{
+	UErrorCode error = U_ZERO_ERROR;
+	const UNormalizer2 *nfc = unorm2_getNFCInstance(&error);
+
+	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
+	new->ref_count++;
+
+	/* Assume that by default normalisation to NFC does not increase the number of code points */
+	new->val = ecalloc(sizeof(UChar), old->len + 1);
+
+	/* Normalize */
+	new->len = unorm2_normalize(nfc, old->val, old->len, new->val, old->len + 1, &error);
+
+	/* Replace if OK */
+	if (error == U_ZERO_ERROR) {
+		return new;
+	}
+
+	/* If there isn't a buffer size issue, bail */
+	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
+		php_icu_text_dtor(new);
+		*ret_error = error;
+		return NULL;
+	}
+
+	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
+	efree(new->val);
+
+	new->val = ecalloc(sizeof(UChar), new->len + 1);
+	error = U_ZERO_ERROR;
+
+	new->len = unorm2_normalize(nfc, old->val, old->len, new->val, new->len + 1, &error);
+
+	if (U_FAILURE(error)) {
+		php_icu_text_dtor(new);
+		*ret_error = error;
+		return NULL;
+	}
+
+	return new;
+}
+
+#define PHP_ICU_TEXT_ADDREF(t) (t)->ref_count++
+
+#if 0
+static struct _php_icu_text* php_icu_text_clone(struct _php_icu_text *t)
+{
+	struct _php_icu_text *new = ecalloc(1, sizeof(struct _php_icu_text));
+
+	new->val = ecalloc(sizeof(UChar), old->len + 1);
+	memcpy(new->val, old->val, old->len * sizeof(UChar));
+	new->len = old->len;
+
+	new->ref_count++;
+
+	return new;
+}
+#endif
+
+static void php_icu_text_dtor(struct _php_icu_text *t)
+{
+	t->ref_count--;
+
+	if (t->ref_count == 0) {
+		efree(t->val);
+		efree(t);
+	}
+}
+
 static zend_object *text_object_new_text(zend_class_entry *class_type) /* {{{ */
 {
 	php_text_obj *intern = zend_object_alloc(sizeof(php_text_obj), class_type);
@@ -29,7 +158,7 @@ static zend_object *text_object_new_text(zend_class_entry *class_type) /* {{{ */
 	zend_object_std_init(&intern->std, class_type);
 	object_properties_init(&intern->std, class_type);
 
-	intern->text = NULL;
+	intern->txt = NULL;
 
 	return &intern->std;
 } /* }}} */
@@ -38,8 +167,8 @@ static void text_object_free_storage_text(zend_object *object) /* {{{ */
 {
 	php_text_obj *intern = php_text_obj_from_obj(object);
 
-	if (intern->text) {
-		efree(intern->text);
+	if (intern->txt) {
+		php_icu_text_dtor(intern->txt);
 	}
 	if (intern->collation_name) {
 		efree(intern->collation_name);
@@ -55,9 +184,8 @@ static bool php_text_init_from_text(php_text_obj *new_obj, zend_object *object)
 {
 	php_text_obj *old_obj = php_text_obj_from_obj(object);
 
-	new_obj->text = ecalloc(sizeof(UChar), old_obj->text_len + 1);
-	memcpy(new_obj->text, old_obj->text, old_obj->text_len * sizeof(UChar));
-	new_obj->text_len = old_obj->text_len;
+	new_obj->txt = old_obj->txt;
+	PHP_ICU_TEXT_ADDREF(new_obj->txt);
 
 	return true;
 }
@@ -65,45 +193,18 @@ static bool php_text_init_from_text(php_text_obj *new_obj, zend_object *object)
 static bool php_text_init_from_utf8_string(php_text_obj *textobj, const zend_string *text_str)
 {
 	UErrorCode error    = U_ZERO_ERROR;
-	int32_t    dest_len = 0;
 
-	if (textobj->text) {
-		efree(textobj->text);
+	if (textobj->txt) {
+		php_icu_text_dtor(textobj->txt);
+		textobj->txt = NULL;
 	}
 
-	/* Allocate — guess that the buffer is the length of text_str_len + \0 */
-	textobj->text = ecalloc(sizeof(UChar),  ZSTR_LEN(text_str) + 1);
+	textobj->txt = php_icu_text_ctor_from_zstring(text_str, &error);
 
-	/* Preflighting */
-	u_strFromUTF8(textobj->text, ZSTR_LEN(text_str) + 1, &dest_len, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
-
-	if (error == U_ZERO_ERROR) {
-		textobj->text_len = dest_len;
-		return true;
-	}
-
-	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
+	if (!textobj->txt) {
 		zend_value_error(u_errorName(error));
 		return false;
 	}
-
-	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
-	efree(textobj->text);
-
-	textobj->text = ecalloc(sizeof(UChar), dest_len + 1);
-	error = U_ZERO_ERROR;
-
-	u_strFromUTF8(textobj->text, ZSTR_LEN(text_str) + 1, NULL, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
-
-	if (U_FAILURE(error)) {
-		efree(textobj->text);
-		textobj->text = NULL;
-		textobj->text_len = 0;
-		zend_value_error(u_errorName(error));
-		return false;
-	}
-
-	textobj->text_len = dest_len;
 
 	return true;
 }
@@ -111,49 +212,15 @@ static bool php_text_init_from_utf8_string(php_text_obj *textobj, const zend_str
 static bool php_text_normalize(php_text_obj *textobj)
 {
 	UErrorCode error = U_ZERO_ERROR;
-	const UNormalizer2 *nfc = unorm2_getNFCInstance(&error);
-	UChar *converted = NULL;
-	int32_t new_len = 0;
+	struct _php_icu_text *normalized = php_icu_text_ctor_from_text_normalize(textobj->txt, &error);
 
-	/* Assume that by default normalisation to NFC does not increase the number of code points */
-	converted = ecalloc(sizeof(UChar), textobj->text_len + 1);
-
-	/* Normalize */
-	new_len = unorm2_normalize(nfc, textobj->text, textobj->text_len, converted, textobj->text_len, &error);
-
-	/* Replace if OK */
-	if (error == U_ZERO_ERROR) {
-		efree(textobj->text);
-		textobj->text = converted;
-		textobj->text_len = new_len;
-
-		return true;
-	}
-
-	/* If there isn't a buffer size issue, bail */
-	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
-		efree(converted);
+	if (!normalized) {
 		zend_value_error(u_errorName(error));
 		return false;
 	}
 
-	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
-	efree(converted);
-
-	converted = ecalloc(sizeof(UChar), new_len + 1);
-	error = U_ZERO_ERROR;
-
-	new_len = unorm2_normalize(nfc, textobj->text, textobj->text_len, converted, new_len + 1, &error);
-
-	if (U_FAILURE(error)) {
-		efree(converted);
-		zend_value_error(u_errorName(error));
-		return false;
-	}
-
-	efree(textobj->text);
-	textobj->text = converted;
-	textobj->text_len = new_len;
+	php_icu_text_dtor(textobj->txt);
+	textobj->txt = normalized;
 
 	return true;
 }
@@ -199,7 +266,7 @@ static bool php_uchar_to_utf8(UChar *input, int32_t input_len, char **text_str, 
 
 static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *text_str_len)
 {
-	return php_uchar_to_utf8(textobj->text, textobj->text_len, text_str, text_str_len);
+	return php_uchar_to_utf8(textobj->txt->val, textobj->txt->len, text_str, text_str_len);
 }
 
 static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)
@@ -294,7 +361,7 @@ static HashTable *text_object_get_properties_for(zend_object *object, zend_prop_
 
 	textobj = php_text_obj_from_obj(object);
 	props = zend_array_dup(zend_std_get_properties(object));
-	if (!textobj->text) {
+	if (!textobj->txt) {
 		return props;
 	}
 
@@ -394,7 +461,7 @@ PHP_METHOD(Text, concat)
 			RETURN_THROWS();
 		}
 
-		buffer_size_needed += Z_PHPTEXT_P(arg)->text_len;
+		buffer_size_needed += Z_PHPTEXT_P(arg)->txt->len;
 	}
 
 	/* Allocate */
@@ -405,13 +472,16 @@ PHP_METHOD(Text, concat)
 	for (i = 0; i < argc; i++) {
 		zval    *arg = args + i;
 
-		memcpy((char*) concat_text + start_pos, Z_PHPTEXT_P(arg)->text, Z_PHPTEXT_P(arg)->text_len * sizeof(UChar));
-		start_pos += (Z_PHPTEXT_P(arg)->text_len * sizeof(UChar));
+		if (Z_TYPE_P(arg) == IS_OBJECT) {
+			memcpy((char*) concat_text + start_pos, Z_PHPTEXT_P(arg)->txt->val, Z_PHPTEXT_P(arg)->txt->len * sizeof(UChar));
+			start_pos += (Z_PHPTEXT_P(arg)->txt->len * sizeof(UChar));
+		} else if (Z_TYPE_P(arg) == IS_STRING) {
+		}
 	}
 
 	object_init_ex(return_value, text_ce);
-	Z_PHPTEXT_P(return_value)->text = concat_text;
-	Z_PHPTEXT_P(return_value)->text_len = buffer_size_needed;
+	Z_PHPTEXT_P(return_value)->txt = php_icu_text_ctor_from_uchar(concat_text, buffer_size_needed);
+
 	php_text_clone_locale(Z_PHPTEXT_P(return_value), Z_OBJ_P(args));
 
 	if (!php_text_normalize(Z_PHPTEXT_P(return_value))) {

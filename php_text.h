@@ -24,12 +24,17 @@ ZEND_END_MODULE_GLOBALS(text)
 
 typedef struct _php_text_obj php_text_obj;
 
+struct _php_icu_text {
+	UChar        *val;
+	int32_t       len; /* Without trailing \0 */
+	uint32_t      ref_count;
+};
+
 struct _php_text_obj {
-	UChar        *text;
-	int32_t       text_len; /* Without trailing \0 */
-	char         *collation_name;
-	UCollator    *collation_obj;
-	zend_object   std;
+	struct _php_icu_text *txt;
+	char                 *collation_name;
+	UCollator            *collation_obj;
+	zend_object           std;
 };
 
 static inline php_text_obj *php_text_obj_from_obj(zend_object *obj) {
