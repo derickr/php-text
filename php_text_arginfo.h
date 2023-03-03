@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: d55ba4354b05a8676d927748d2bf55e649401e51 */
+ * Stub hash: 84a99d8fbfba913ce5d019389b0651031b4dc41f */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Text___construct, 0, 0, 1)
 	ZEND_ARG_OBJ_TYPE_MASK(0, text, Text, MAY_BE_STRING, NULL)
@@ -10,7 +10,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Text___toString, 0, 0, IS_
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Text_concat, 0, 0, Text, 0)
-	ZEND_ARG_VARIADIC_OBJ_INFO(0, elements, Text, 0)
+	ZEND_ARG_VARIADIC_INFO(0, elements)
 ZEND_END_ARG_INFO()
 
 

@@ -428,6 +428,23 @@ PHP_METHOD(Text, __toString)
 	efree(converted);
 }
 
+static struct _php_icu_text **php_icu_string_list_ctor(uint32_t argc)
+{
+	return ecalloc(argc, sizeof(struct _php_icu_text));
+}
+
+static void php_icu_string_list_dtor(struct _php_icu_text **strings, uint32_t argc)
+{
+	uint32_t i;
+
+	for (i = 0; i < argc; i++) {
+		if (strings[i]) {
+			php_icu_text_dtor(strings[i]);
+		}
+	}
+	efree(strings);
+}
+
 PHP_METHOD(Text, concat)
 {
 	int      argc, i;
@@ -453,15 +470,35 @@ PHP_METHOD(Text, concat)
 	}
 
 	/* Loop for type check and buffer size allocation */
+	struct _php_icu_text **string_list = php_icu_string_list_ctor(argc);
+
 	for (i = 0; i < argc; i++) {
 		zval *arg = args + i;
 
-		if (Z_TYPE_P(arg) != IS_OBJECT || !instanceof_function(Z_OBJ_P(arg)->ce, text_ce)) {
-			zend_argument_type_error(i + 1, "must be of class Text, %s given", zend_zval_value_name(arg));
+		if (Z_TYPE_P(arg) == IS_OBJECT) {
+			if (!instanceof_function(Z_OBJ_P(arg)->ce, text_ce)) {
+				zend_argument_type_error(i + 1, "must be of class Text or a string, %s given", zend_zval_value_name(arg));
+				php_icu_string_list_dtor(string_list, argc);
+				RETURN_THROWS();
+			}
+			buffer_size_needed += Z_PHPTEXT_P(arg)->txt->len;
+		} else if (Z_TYPE_P(arg) == IS_STRING) {
+			UErrorCode error;
+
+			string_list[i] = php_icu_text_ctor_from_zstring(Z_STR_P(arg), &error);
+
+			if (!string_list[i]) {
+				zend_argument_error(NULL, i + 1, "%s", u_errorName(error));
+				php_icu_string_list_dtor(string_list, argc);
+				RETURN_THROWS();
+			}
+
+			buffer_size_needed += string_list[i]->len;
+		} else {
+			zend_argument_type_error(i + 1, "must be of class Text or a string, %s given", zend_zval_value_name(arg));
+			php_icu_string_list_dtor(string_list, argc);
 			RETURN_THROWS();
 		}
-
-		buffer_size_needed += Z_PHPTEXT_P(arg)->txt->len;
 	}
 
 	/* Allocate */
@@ -476,13 +513,21 @@ PHP_METHOD(Text, concat)
 			memcpy((char*) concat_text + start_pos, Z_PHPTEXT_P(arg)->txt->val, Z_PHPTEXT_P(arg)->txt->len * sizeof(UChar));
 			start_pos += (Z_PHPTEXT_P(arg)->txt->len * sizeof(UChar));
 		} else if (Z_TYPE_P(arg) == IS_STRING) {
+			memcpy((char*) concat_text + start_pos, string_list[i]->val, string_list[i]->len * sizeof(UChar));
+			start_pos += (string_list[i]->len * sizeof(UChar));
 		}
 	}
+
+	php_icu_string_list_dtor(string_list, argc);
 
 	object_init_ex(return_value, text_ce);
 	Z_PHPTEXT_P(return_value)->txt = php_icu_text_ctor_from_uchar(concat_text, buffer_size_needed);
 
-	php_text_clone_locale(Z_PHPTEXT_P(return_value), Z_OBJ_P(args));
+	if (Z_TYPE_P(args) == IS_OBJECT) {
+		php_text_clone_locale(Z_PHPTEXT_P(return_value), Z_OBJ_P(args));
+	} else {
+		php_text_attach_locale(Z_PHPTEXT_P(return_value), DEFAULT_LOCALE);
+	}
 
 	if (!php_text_normalize(Z_PHPTEXT_P(return_value))) {
 		RETURN_THROWS();
