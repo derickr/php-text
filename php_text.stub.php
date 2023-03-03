@@ -8,8 +8,5 @@ final class Text
 
 	public function __toString() : string {}
 
-	/**
-	 * @param string|Text $elements
-	 */
-	static public function concat(...$elements) : Text {}
+	static public function concat(string|Text ...$elements) : Text {}
 }
