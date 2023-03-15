@@ -154,7 +154,9 @@ static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *tex
 	return php_uchar_to_utf8(PHP_ICU_TEXT_VAL(textobj->txt), PHP_ICU_TEXT_LEN(textobj->txt), text_str, text_str_len);
 }
 
-static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)
+/* Collation Helpers */
+
+static bool php_text_attach_collation(php_text_obj *textobj, const char *collation)
 {
 	UErrorCode error = U_ZERO_ERROR;
 
@@ -169,7 +171,7 @@ static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)
 	return true;
 }
 
-static bool php_text_clone_locale(php_text_obj *textobj, zend_object *object)
+static bool php_text_clone_collation(php_text_obj *textobj, zend_object *object)
 {
 	UErrorCode error = U_ZERO_ERROR;
 	php_text_obj *old_obj = php_text_obj_from_obj(object);
@@ -205,9 +207,9 @@ static void text_object_to_hash(php_text_obj *textobj, HashTable *props)
 	zend_hash_str_update(props, "text", sizeof("text")-1, &zv);
 	efree(text_str);
 
-	/* The locale */
+	/* The collation */
 	display_buffer = ecalloc(sizeof(UChar), MAX_COLLATION_DISPLAY_NAME + 1);
-	display_buffer_len = ucol_getDisplayName(textobj->collation_name, DISPLAY_LOCALE, display_buffer, MAX_COLLATION_DISPLAY_NAME, &error);
+	display_buffer_len = ucol_getDisplayName(textobj->collation_name, DISPLAY_COLLATION, display_buffer, MAX_COLLATION_DISPLAY_NAME, &error);
 
 	if (U_FAILURE(error) || error == U_STRING_NOT_TERMINATED_WARNING) {
 		zend_value_error(u_errorName(error));
@@ -281,7 +283,7 @@ PHP_METHOD(Text, __construct)
 			if (!php_text_normalize(Z_PHPTEXT_P(ZEND_THIS))) {
 				RETURN_THROWS();
 			}
-			if (!php_text_attach_locale(Z_PHPTEXT_P(ZEND_THIS), collation_str ? collation_str : DEFAULT_LOCALE)) {
+			if (!php_text_attach_collation(Z_PHPTEXT_P(ZEND_THIS), collation_str ? collation_str : DEFAULT_COLLATION)) {
 				RETURN_THROWS();
 			}
 			break;
@@ -291,10 +293,10 @@ PHP_METHOD(Text, __construct)
 				RETURN_THROWS();
 			}
 			if (collation_str) {
-				if (!php_text_attach_locale(Z_PHPTEXT_P(ZEND_THIS), collation_str)) {
+				if (!php_text_attach_collation(Z_PHPTEXT_P(ZEND_THIS), collation_str)) {
 					RETURN_THROWS();
 				}
-			} else if (!php_text_clone_locale(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
+			} else if (!php_text_clone_collation(Z_PHPTEXT_P(ZEND_THIS), Z_OBJ_P(z_text_str))) {
 				RETURN_THROWS();
 			}
 			break;
@@ -343,7 +345,7 @@ PHP_METHOD(Text, concat)
 		object_init_ex(return_value, text_ce);
 
 		php_text_init_from_utf8_string(Z_PHPTEXT_P(return_value), tmp_string);
-		php_text_attach_locale(Z_PHPTEXT_P(return_value), DEFAULT_LOCALE);
+		php_text_attach_collation(Z_PHPTEXT_P(return_value), DEFAULT_COLLATION);
 
 		zend_string_release(tmp_string);
 		return;
@@ -498,7 +500,7 @@ PHP_METHOD(Text, join)
 	} else if (context.collation_name) {
 		php_text_attach_collation(Z_PHPTEXT_P(return_value), context.collation_name);
 	} else {
-		php_text_attach_locale(Z_PHPTEXT_P(return_value), DEFAULT_LOCALE);
+		php_text_attach_collation(Z_PHPTEXT_P(return_value), DEFAULT_COLLATION);
 	}
 
 	if (!php_text_normalize(Z_PHPTEXT_P(return_value))) {
