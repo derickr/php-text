@@ -5,6 +5,9 @@
 #include "php.h"
 #include "php_text.h"
 #include "ext/standard/info.h"
+#include "ext/spl/spl_iterators.h"
+
+#include "Zend/zend_interfaces.h"
 
 #include "unicode/unorm2.h"
 
@@ -304,22 +307,8 @@ PHP_METHOD(Text, __toString)
 	efree(converted);
 }
 
-static struct _php_icu_text **php_icu_string_list_ctor(uint32_t argc)
-{
-	return ecalloc(argc, sizeof(struct _php_icu_text));
-}
 
-static void php_icu_string_list_dtor(struct _php_icu_text **strings, uint32_t argc)
-{
-	uint32_t i;
-
-	for (i = 0; i < argc; i++) {
-		if (strings[i]) {
-			php_icu_text_dtor(strings[i]);
-		}
-	}
-	efree(strings);
-}
+/* Text::concat */
 
 PHP_METHOD(Text, concat)
 {
@@ -327,7 +316,7 @@ PHP_METHOD(Text, concat)
 	zval    *args = NULL;
 	zval    *arg;
 	int32_t  buffer_size_needed = 0;
-	UChar   *concat_text;
+	struct _php_icu_text *concat_text;
 
 	ZEND_PARSE_PARAMETERS_START(0, -1)
 		Z_PARAM_VARIADIC('*', args, argc)
@@ -345,8 +334,7 @@ PHP_METHOD(Text, concat)
 		return;
 	}
 
-	/* Loop for type check and buffer size allocation */
-	struct _php_icu_text **string_list = php_icu_string_list_ctor(argc);
+	PHP_ICU_TEXT_INIT(concat_text);
 
 	for (i = 0; i < argc; i++) {
 		zval *arg = args + i;
@@ -354,53 +342,146 @@ PHP_METHOD(Text, concat)
 		if (Z_TYPE_P(arg) == IS_OBJECT) {
 			if (!instanceof_function(Z_OBJ_P(arg)->ce, text_ce)) {
 				zend_argument_type_error(i + 1, "must be of class Text or a string, %s given", zend_zval_value_name(arg));
-				php_icu_string_list_dtor(string_list, argc);
+				php_icu_text_dtor(concat_text);
 				RETURN_THROWS();
 			}
-			buffer_size_needed += Z_PHPTEXT_P(arg)->txt->len;
+			PHP_ICU_TEXT_APPEND_UCHAR(
+				concat_text,
+				PHP_ICU_TEXT_VAL(Z_PHPTEXT_P(arg)->txt),
+				PHP_ICU_TEXT_LEN(Z_PHPTEXT_P(arg)->txt)
+			);
 		} else if (Z_TYPE_P(arg) == IS_STRING) {
 			UErrorCode error;
+			struct _php_icu_text *str_text;
 
-			string_list[i] = php_icu_text_ctor_from_zstring(Z_STR_P(arg), &error);
+			str_text = php_icu_text_ctor_from_zstring(Z_STR_P(arg), &error);
 
-			if (!string_list[i]) {
+			if (!str_text) {
 				zend_argument_error(NULL, i + 1, "%s", u_errorName(error));
-				php_icu_string_list_dtor(string_list, argc);
+				php_icu_text_dtor(concat_text);
 				RETURN_THROWS();
 			}
 
-			buffer_size_needed += string_list[i]->len;
+			PHP_ICU_TEXT_APPEND_UCHAR(concat_text, PHP_ICU_TEXT_VAL(str_text), PHP_ICU_TEXT_LEN(str_text));
+			php_icu_text_dtor(str_text);
 		} else {
 			zend_argument_type_error(i + 1, "must be of class Text or a string, %s given", zend_zval_value_name(arg));
-			php_icu_string_list_dtor(string_list, argc);
+			php_icu_text_dtor(concat_text);
 			RETURN_THROWS();
 		}
 	}
 
-	/* Allocate */
-	concat_text = ecalloc(sizeof(UChar), buffer_size_needed + 1);
-
-	/* Loop to concat */
-	int32_t  start_pos = 0;
-	for (i = 0; i < argc; i++) {
-		zval    *arg = args + i;
-
-		if (Z_TYPE_P(arg) == IS_OBJECT) {
-			memcpy((char*) concat_text + start_pos, Z_PHPTEXT_P(arg)->txt->val, Z_PHPTEXT_P(arg)->txt->len * sizeof(UChar));
-			start_pos += (Z_PHPTEXT_P(arg)->txt->len * sizeof(UChar));
-		} else if (Z_TYPE_P(arg) == IS_STRING) {
-			memcpy((char*) concat_text + start_pos, string_list[i]->val, string_list[i]->len * sizeof(UChar));
-			start_pos += (string_list[i]->len * sizeof(UChar));
-		}
-	}
-
-	php_icu_string_list_dtor(string_list, argc);
-
 	object_init_ex(return_value, text_ce);
-	Z_PHPTEXT_P(return_value)->txt = php_icu_text_ctor_from_uchar(concat_text, buffer_size_needed);
+	Z_PHPTEXT_P(return_value)->txt = php_icu_text_clone(concat_text);
+
+	php_icu_text_dtor(concat_text);
 
 	if (Z_TYPE_P(args) == IS_OBJECT) {
-		php_text_clone_locale(Z_PHPTEXT_P(return_value), Z_OBJ_P(args));
+		php_text_clone_collation(Z_PHPTEXT_P(return_value), Z_OBJ_P(args));
+	} else {
+		php_text_attach_collation(Z_PHPTEXT_P(return_value), DEFAULT_COLLATION);
+	}
+
+	if (!php_text_normalize(Z_PHPTEXT_P(return_value))) {
+		RETURN_THROWS();
+	}
+}
+
+/* Text::join() */
+
+struct _php_text_iterator_context
+{
+	struct _php_icu_text *text;
+	struct _php_icu_text *separator;
+	const char           *collation_name;
+	bool                  error;
+};
+
+static int text_join_zval_elements(zval *data, void *puser)
+{
+	struct _php_text_iterator_context *context = (struct _php_text_iterator_context*)puser;
+	struct _php_icu_text *value;
+
+	if (EG(exception)) {
+		return ZEND_HASH_APPLY_STOP;
+	}
+	if (data == NULL) {
+		return ZEND_HASH_APPLY_STOP;
+	}
+
+	value = php_icu_text_ctor_from_zval_argument(0, data, context->collation_name ? NULL : &context->collation_name);
+	if (!value) {
+		context->error = true;
+		return ZEND_HASH_APPLY_STOP;
+	}
+
+	if (!PHP_ICU_TEXT_IS_EMPTY(context->text)) {
+		PHP_ICU_TEXT_APPEND_UCHAR(context->text, PHP_ICU_TEXT_VAL(context->separator), PHP_ICU_TEXT_LEN(context->separator));
+	}
+
+	PHP_ICU_TEXT_APPEND_UCHAR(context->text, PHP_ICU_TEXT_VAL(value), PHP_ICU_TEXT_LEN(value));
+
+	php_icu_text_dtor(value);
+
+	return ZEND_HASH_APPLY_KEEP;
+}
+
+static int text_join_elements(zend_object_iterator *iter, void *puser) /* {{{ */
+{
+	zval *data = iter->funcs->get_current_data(iter);
+
+	return text_join_zval_elements(data, puser);
+}
+
+PHP_METHOD(Text, join)
+{
+	int      argc, i;
+	zval    *args = NULL;
+	zval    *arg;
+	int32_t  buffer_size_needed = 0;
+	UChar   *concat_text;
+	zval    *iterator;
+	zval    *separator;
+	zend_string *collation = NULL;
+	struct _php_text_iterator_context context;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_ITERABLE(iterator)
+		Z_PARAM_ZVAL(separator)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR(collation)
+	ZEND_PARSE_PARAMETERS_END();
+
+	/* Setup context with separator */
+	context.error = false;
+	context.separator = php_icu_text_ctor_from_zval_argument(1, separator, NULL);
+	context.text = php_icu_text_ctor_empty();
+	context.collation_name = NULL;
+
+	if (!context.separator) {
+		RETURN_THROWS();
+	}
+
+	if (Z_TYPE_P(iterator) == IS_ARRAY) {
+		zend_hash_apply_with_argument(HASH_OF(iterator), text_join_zval_elements, (void*) &context);
+	} else {
+		spl_iterator_apply(iterator, text_join_elements, (void*) &context);
+	}
+
+	if (context.error) {
+		php_icu_text_dtor(context.separator);
+		RETURN_THROWS();
+	}
+
+	object_init_ex(return_value, text_ce);
+	Z_PHPTEXT_P(return_value)->txt = php_icu_text_clone(context.text);
+	php_icu_text_dtor(context.separator);
+	php_icu_text_dtor(context.text);
+
+	if (collation) {
+		php_text_attach_collation(Z_PHPTEXT_P(return_value), ZSTR_VAL(collation));
+	} else if (context.collation_name) {
+		php_text_attach_collation(Z_PHPTEXT_P(return_value), context.collation_name);
 	} else {
 		php_text_attach_locale(Z_PHPTEXT_P(return_value), DEFAULT_LOCALE);
 	}
