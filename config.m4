@@ -6,5 +6,5 @@ if test "$PHP_TEXT" != "no"; then
   PHP_SUBST(TEXT_SHARED_LIBADD)
 
   TEXT_COMMON_FLAGS="$ICU_CFLAGS -Wno-write-strings -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1"
-  PHP_NEW_EXTENSION(text, text.c, $ext_shared)
+  PHP_NEW_EXTENSION(text, text.c icu_text.c, $ext_shared)
 fi

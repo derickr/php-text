@@ -14,144 +14,20 @@ ZEND_GET_MODULE(text)
 
 #include "php_text_arginfo.h"
 
-#define DISPLAY_LOCALE "en_US"
-#define DEFAULT_LOCALE "root"
+#define DISPLAY_COLLATION "en_US"
+#define DEFAULT_COLLATION "root"
+#define MAX_COLLATION_DISPLAY_NAME 256
+
 
 ZEND_DECLARE_MODULE_GLOBALS(text)
 
+/****************************************************************************
+ * Text Object Wrapper Helpers
+ */
 static zend_object_handlers text_object_handlers_text;
 zend_class_entry *text_ce;
 
-/* Forward declarations */
-static void php_icu_text_dtor(struct _php_icu_text *t);
-
-
-static struct _php_icu_text* php_icu_text_ctor_from_zstring(const zend_string *text_str, UErrorCode *ret_error)
-{
-	UErrorCode            error    = U_ZERO_ERROR;
-	int32_t               dest_len = 0;
-
-	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
-	new->ref_count++;
-
-	/* Allocate — guess that the buffer is the length of text_str_len + \0 */
-	new->val = ecalloc(sizeof(UChar), ZSTR_LEN(text_str) + 1);
-
-	/* Preflighting */
-	u_strFromUTF8(new->val, ZSTR_LEN(text_str) + 1, &dest_len, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
-
-	if (error == U_ZERO_ERROR) {
-		new->len = dest_len;
-		return new;
-	}
-
-	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
-		php_icu_text_dtor(new);
-		*ret_error = error;
-		return NULL;
-	}
-
-	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
-	efree(new->val);
-
-	new->val = ecalloc(sizeof(UChar), dest_len + 1);
-	error = U_ZERO_ERROR;
-
-	u_strFromUTF8(new->val, ZSTR_LEN(text_str) + 1, NULL, ZSTR_VAL(text_str), ZSTR_LEN(text_str), &error);
-
-	if (U_FAILURE(error)) {
-		php_icu_text_dtor(new);
-		*ret_error = error;
-		return NULL;
-	}
-
-	new->len = dest_len;
-
-	return new;
-}
-
-static struct _php_icu_text* php_icu_text_ctor_from_uchar(UChar *val, int32_t len)
-{
-	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
-	new->ref_count++;
-
-	new->val = val;
-	new->len = len;
-
-	return new;
-}
-
-static struct _php_icu_text* php_icu_text_ctor_from_text_normalize(struct _php_icu_text *old, UErrorCode *ret_error)
-{
-	UErrorCode error = U_ZERO_ERROR;
-	const UNormalizer2 *nfc = unorm2_getNFCInstance(&error);
-
-	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
-	new->ref_count++;
-
-	/* Assume that by default normalisation to NFC does not increase the number of code points */
-	new->val = ecalloc(sizeof(UChar), old->len + 1);
-
-	/* Normalize */
-	new->len = unorm2_normalize(nfc, old->val, old->len, new->val, old->len + 1, &error);
-
-	/* Replace if OK */
-	if (error == U_ZERO_ERROR) {
-		return new;
-	}
-
-	/* If there isn't a buffer size issue, bail */
-	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
-		php_icu_text_dtor(new);
-		*ret_error = error;
-		return NULL;
-	}
-
-	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
-	efree(new->val);
-
-	new->val = ecalloc(sizeof(UChar), new->len + 1);
-	error = U_ZERO_ERROR;
-
-	new->len = unorm2_normalize(nfc, old->val, old->len, new->val, new->len + 1, &error);
-
-	if (U_FAILURE(error)) {
-		php_icu_text_dtor(new);
-		*ret_error = error;
-		return NULL;
-	}
-
-	return new;
-}
-
-#define PHP_ICU_TEXT_ADDREF(t) (t)->ref_count++
-
-#if 0
-static struct _php_icu_text* php_icu_text_clone(struct _php_icu_text *t)
-{
-	struct _php_icu_text *new = ecalloc(1, sizeof(struct _php_icu_text));
-
-	new->val = ecalloc(sizeof(UChar), old->len + 1);
-	memcpy(new->val, old->val, old->len * sizeof(UChar));
-	new->len = old->len;
-
-	new->ref_count++;
-
-	return new;
-}
-#endif
-
-static void php_icu_text_dtor(struct _php_icu_text *t)
-{
-	t->ref_count--;
-
-	if (t->ref_count == 0) {
-		efree(t->val);
-		efree(t);
-	}
-}
-
-static zend_object *text_object_new_text(zend_class_entry *class_type) /* {{{ */
+static zend_object *text_object_new_text(zend_class_entry *class_type)
 {
 	php_text_obj *intern = zend_object_alloc(sizeof(php_text_obj), class_type);
 
@@ -266,7 +142,7 @@ static bool php_uchar_to_utf8(UChar *input, int32_t input_len, char **text_str, 
 
 static bool php_text_to_utf8(php_text_obj *textobj, char **text_str, size_t *text_str_len)
 {
-	return php_uchar_to_utf8(textobj->txt->val, textobj->txt->len, text_str, text_str_len);
+	return php_uchar_to_utf8(PHP_ICU_TEXT_VAL(textobj->txt), PHP_ICU_TEXT_LEN(textobj->txt), text_str, text_str_len);
 }
 
 static bool php_text_attach_locale(php_text_obj *textobj, const char *collation)

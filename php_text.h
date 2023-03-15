@@ -3,6 +3,8 @@
 
 #include "php.h"
 
+#include "icu_text.h"
+
 #include "unicode/ustring.h"
 #include "unicode/ucol.h"
 
@@ -24,11 +26,6 @@ ZEND_END_MODULE_GLOBALS(text)
 
 typedef struct _php_text_obj php_text_obj;
 
-struct _php_icu_text {
-	UChar        *val;
-	int32_t       len; /* Without trailing \0 */
-	uint32_t      ref_count;
-};
 
 struct _php_text_obj {
 	struct _php_icu_text *txt;
