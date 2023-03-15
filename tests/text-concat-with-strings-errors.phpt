@@ -44,7 +44,7 @@ Error: Text::concat(): Argument #2 U_INVALID_CHAR_FOUND
 ===
 
 I kveld, Øl! (49206b76656c642c20c3986c21):
-object(Text)#1 (2) {
+object(Text)#%d (2) {
   ["text"]=>
   string(13) "I kveld, Øl!"
   ["collation"]=>

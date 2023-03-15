@@ -33,7 +33,7 @@ foreach ($stringSets2 as $set2) {
 ===
 
 Øl i kveld! (c3986c2069206b76656c6421):
-object(Text)#3 (2) {
+object(Text)#%d (2) {
   ["text"]=>
   string(12) "Øl i kveld!"
   ["collation"]=>
@@ -43,7 +43,7 @@ object(Text)#3 (2) {
 ===
 
 Å (c385):
-object(Text)#4 (2) {
+object(Text)#%d (2) {
   ["text"]=>
   string(2) "Å"
   ["collation"]=>
@@ -53,7 +53,7 @@ object(Text)#4 (2) {
 ===
 
 Øl i kveld! (c3986c2069206b76656c6421):
-object(Text)#3 (2) {
+object(Text)#%d (2) {
   ["text"]=>
   string(12) "Øl i kveld!"
   ["collation"]=>
@@ -63,7 +63,7 @@ object(Text)#3 (2) {
 ===
 
 Å (c385):
-object(Text)#4 (2) {
+object(Text)#%d (2) {
   ["text"]=>
   string(2) "Å"
   ["collation"]=>

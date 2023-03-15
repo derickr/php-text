@@ -40,9 +40,9 @@ static zend_object *text_object_new_text(zend_class_entry *class_type)
 	intern->txt = NULL;
 
 	return &intern->std;
-} /* }}} */
+}
 
-static void text_object_free_storage_text(zend_object *object) /* {{{ */
+static void text_object_free_storage_text(zend_object *object)
 {
 	php_text_obj *intern = php_text_obj_from_obj(object);
 
@@ -57,7 +57,9 @@ static void text_object_free_storage_text(zend_object *object) /* {{{ */
 	}
 
 	zend_object_std_dtor(&intern->std);
-} /* }}} */
+}
+
+/* Initialisation Routines */
 
 static bool php_text_init_from_text(php_text_obj *new_obj, zend_object *object)
 {
@@ -88,6 +90,8 @@ static bool php_text_init_from_utf8_string(php_text_obj *textobj, const zend_str
 	return true;
 }
 
+/* Normalisation Helper */
+
 static bool php_text_normalize(php_text_obj *textobj)
 {
 	UErrorCode error = U_ZERO_ERROR;
@@ -103,6 +107,8 @@ static bool php_text_normalize(php_text_obj *textobj)
 
 	return true;
 }
+
+/* Conversion to String helpers */
 
 static bool php_uchar_to_utf8(UChar *input, int32_t input_len, char **text_str, size_t *text_str_len)
 {
@@ -179,7 +185,7 @@ static bool php_text_clone_locale(php_text_obj *textobj, zend_object *object)
 	return true;
 }
 
-#define MAX_COLLATION_DISPLAY_NAME 256
+/* Debug and Serialisation Helpers */
 
 static void text_object_to_hash(php_text_obj *textobj, HashTable *props)
 {
@@ -249,6 +255,12 @@ static HashTable *text_object_get_properties_for(zend_object *object, zend_prop_
 	return props;
 }
 
+/****************************************************************************
+ * Text Object Implementation
+ */
+
+/* Text::__construct() */
+
 PHP_METHOD(Text, __construct)
 {
 	zval   *z_text_str;
@@ -293,6 +305,9 @@ PHP_METHOD(Text, __construct)
 		}
 	}
 }
+
+
+/* Text::__toString() */
 
 PHP_METHOD(Text, __toString)
 {
@@ -490,6 +505,11 @@ PHP_METHOD(Text, join)
 		RETURN_THROWS();
 	}
 }
+
+
+/****************************************************************************
+ * Extension Plumbing
+ */
 
 PHP_MINIT_FUNCTION(text)
 {
