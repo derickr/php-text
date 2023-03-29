@@ -60,7 +60,7 @@ struct _php_icu_text* php_icu_text_ctor_empty(void)
 	return new;
 }
 
-static struct _php_icu_text* php_icu_text_ctor_from_uchar(UChar *val, int32_t len)
+struct _php_icu_text* php_icu_text_ctor_from_uchar(UChar *val, int32_t len)
 {
 	struct _php_icu_text* new = ecalloc(1, sizeof(struct _php_icu_text));
 	PHP_ICU_TEXT_ADDREF(new);

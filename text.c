@@ -71,6 +71,13 @@ static bool php_text_init_from_text(php_text_obj *new_obj, zend_object *object)
 	return true;
 }
 
+static bool php_text_init_from_uchar(php_text_obj *textobj, UChar *val, uint32_t len)
+{
+	textobj->txt = php_icu_text_ctor_from_uchar(val, len);
+
+	return true;
+}
+
 static bool php_text_init_from_utf8_string(php_text_obj *textobj, const zend_string *text_str)
 {
 	UErrorCode error    = U_ZERO_ERROR;
@@ -208,6 +215,7 @@ static void text_object_to_hash(php_text_obj *textobj, HashTable *props)
 	efree(text_str);
 
 	/* The collation */
+	assert(textobj->collation_name != NULL);
 	display_buffer = ecalloc(sizeof(UChar), MAX_COLLATION_DISPLAY_NAME + 1);
 	display_buffer_len = ucol_getDisplayName(textobj->collation_name, DISPLAY_COLLATION, display_buffer, MAX_COLLATION_DISPLAY_NAME, &error);
 
@@ -508,6 +516,58 @@ PHP_METHOD(Text, join)
 	}
 }
 
+/* Text::split() */
+
+PHP_METHOD(Text, split)
+{
+	zval                 *z_separator;
+	long                  limit = ZEND_LONG_MAX;
+	struct _php_icu_text *separator;
+	UChar                *p1, *endp, *p2;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_ZVAL(z_separator)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(limit)
+	ZEND_PARSE_PARAMETERS_END();
+
+	separator = php_icu_text_ctor_from_zval_argument(1, z_separator, NULL);
+
+	p1 = PHP_ICU_TEXT_VAL(Z_PHPTEXT_P(ZEND_THIS)->txt);
+	endp = p1 + PHP_ICU_TEXT_LEN(Z_PHPTEXT_P(ZEND_THIS)->txt);
+	p2 = u_strFindFirst(p1, -1, PHP_ICU_TEXT_VAL(separator), PHP_ICU_TEXT_LEN(separator));
+
+	array_init(return_value);
+	zend_hash_real_init_packed(Z_ARRVAL_P(return_value));
+	ZEND_HASH_FILL_PACKED(Z_ARRVAL_P(return_value)) {
+		zval new_text;
+
+		do {
+			object_init_ex(&new_text, text_ce);
+			php_text_init_from_uchar(Z_PHPTEXT(new_text), p1, p2 - p1);
+			php_text_attach_collation(Z_PHPTEXT(new_text), Z_PHPTEXT_P(ZEND_THIS)->collation_name);
+
+			ZEND_HASH_FILL_GROW();
+			ZEND_HASH_FILL_SET(&new_text);
+			ZEND_HASH_FILL_NEXT();
+
+			p1 = p2 + PHP_ICU_TEXT_LEN(separator);
+			p2 = u_strFindFirst(p1, -1, PHP_ICU_TEXT_VAL(separator), PHP_ICU_TEXT_LEN(separator));
+		} while (p2 != NULL && --limit > 1);
+
+		if (p1 <= endp) {
+			object_init_ex(&new_text, text_ce);
+			php_text_init_from_uchar(Z_PHPTEXT(new_text), p1, endp - p1);
+			php_text_attach_collation(Z_PHPTEXT(new_text), Z_PHPTEXT_P(ZEND_THIS)->collation_name);
+
+			ZEND_HASH_FILL_GROW();
+			ZEND_HASH_FILL_SET(&new_text);
+			ZEND_HASH_FILL_NEXT();
+		}
+	} ZEND_HASH_FILL_END();
+
+	php_icu_text_dtor(separator);
+}
 
 /****************************************************************************
  * Extension Plumbing

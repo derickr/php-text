@@ -44,6 +44,7 @@ inline static void _php_icu_text_append_uchar(struct _php_icu_text *t, UChar *v,
 
 struct _php_icu_text* php_icu_text_ctor_empty(void);
 struct _php_icu_text* php_icu_text_ctor_from_text_normalize(struct _php_icu_text *old, UErrorCode *ret_error);
+struct _php_icu_text* php_icu_text_ctor_from_uchar(UChar *val, int32_t len);
 struct _php_icu_text* php_icu_text_ctor_from_zstring(const zend_string *text_str, UErrorCode *ret_error);
 struct _php_icu_text* php_icu_text_ctor_from_zval_argument(int i, zval *arg, const char **collation_name);
 
