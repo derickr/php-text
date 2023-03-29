@@ -12,5 +12,9 @@ final class Text
 
 	static public function join(iterable $elements, string|Text $separator, string $collation = NULL) : Text {}
 
-	public function split(string|Text $subString, int $limit = PHP_INT_MAX) : array;
+	public function split(string|Text $subString, int $limit = PHP_INT_MAX) : array {}
+
+	public function toLower() : Text {}
+
+	public function toUpper() : Text {}
 }

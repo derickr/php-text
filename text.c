@@ -569,6 +569,82 @@ PHP_METHOD(Text, split)
 	php_icu_text_dtor(separator);
 }
 
+/* Text::toLower()/toUpper() */
+
+#define PHP_TEXT_LOWER 1
+#define PHP_TEXT_UPPER 2
+
+static struct _php_icu_text *php_text_case(php_text_obj *textobj, int lower_or_upper)
+{
+	UErrorCode error = U_ZERO_ERROR;
+	int32_t new_len;
+	struct _php_icu_text *old = textobj->txt;
+	struct _php_icu_text *new;
+
+	PHP_ICU_TEXT_INIT(new);
+
+	/* Assume that by default normalisation to NFC does not increase the number of code points */
+	PHP_ICU_TEXT_ALLOC(new, PHP_ICU_TEXT_LEN(old));
+
+	/* Lower case */
+	if (lower_or_upper == PHP_TEXT_LOWER) {
+		new_len = u_strToLower(PHP_ICU_TEXT_VAL(new), PHP_ICU_TEXT_LEN(old), PHP_ICU_TEXT_VAL(old), PHP_ICU_TEXT_LEN(old) + 1, textobj->collation_name, &error);
+	} else {
+		new_len = u_strToUpper(PHP_ICU_TEXT_VAL(new), PHP_ICU_TEXT_LEN(old), PHP_ICU_TEXT_VAL(old), PHP_ICU_TEXT_LEN(old) + 1, textobj->collation_name, &error);
+	}
+
+	/* Replace if OK */
+	if (error == U_ZERO_ERROR) {
+		PHP_ICU_TEXT_SETLEN(new, new_len);
+		return new;
+	}
+
+	/* If there isn't a buffer size issue, bail */
+	if (error != U_BUFFER_OVERFLOW_ERROR && error != U_STRING_NOT_TERMINATED_WARNING) {
+		php_icu_text_dtor(new);
+		zend_value_error(u_errorName(error));
+		return NULL;
+	}
+
+	/* Clean up earlier allocate (too small) buffer, and retry with exact right sized buffer */
+	PHP_ICU_TEXT_FREE(new);
+
+	PHP_ICU_TEXT_ALLOC(new, new_len);
+	error = U_ZERO_ERROR;
+
+	if (lower_or_upper == PHP_TEXT_LOWER) {
+		new->tlen = u_strToLower(PHP_ICU_TEXT_VAL(new), new_len + 1, PHP_ICU_TEXT_VAL(old), PHP_ICU_TEXT_LEN(old), textobj->collation_name, &error);
+	} else {
+		new->tlen = u_strToUpper(PHP_ICU_TEXT_VAL(new), new_len + 1, PHP_ICU_TEXT_VAL(old), PHP_ICU_TEXT_LEN(old), textobj->collation_name, &error);
+	}
+
+	if (U_FAILURE(error)) {
+		zend_value_error(u_errorName(error));
+		php_icu_text_dtor(new);
+		return NULL;
+	}
+
+	return new;
+}
+
+PHP_METHOD(Text, toLower)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	object_init_ex(return_value, text_ce);
+	Z_PHPTEXT_P(return_value)->txt = php_text_case(Z_PHPTEXT_P(ZEND_THIS), PHP_TEXT_LOWER);
+	php_text_attach_collation(Z_PHPTEXT_P(return_value), Z_PHPTEXT_P(ZEND_THIS)->collation_name);
+}
+
+PHP_METHOD(Text, toUpper)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	object_init_ex(return_value, text_ce);
+	Z_PHPTEXT_P(return_value)->txt = php_text_case(Z_PHPTEXT_P(ZEND_THIS), PHP_TEXT_UPPER);
+	php_text_attach_collation(Z_PHPTEXT_P(return_value), Z_PHPTEXT_P(ZEND_THIS)->collation_name);
+}
+
 /****************************************************************************
  * Extension Plumbing
  */
