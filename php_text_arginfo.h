@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 1c95b5642e4c4fa1ec3e422956479ce7e10d31fa */
+ * Stub hash: b4d1463cbe302ae6c7077d566daabc2f9a40be1d */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Text___construct, 0, 0, 1)
 	ZEND_ARG_OBJ_TYPE_MASK(0, text, Text, MAY_BE_STRING, NULL)
@@ -29,6 +29,9 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Text_toUpper arginfo_class_Text_toLower
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Text_getByteCount, 0, 0, IS_LONG, 0)
+ZEND_END_ARG_INFO()
+
 
 ZEND_METHOD(Text, __construct);
 ZEND_METHOD(Text, __toString);
@@ -37,6 +40,7 @@ ZEND_METHOD(Text, join);
 ZEND_METHOD(Text, split);
 ZEND_METHOD(Text, toLower);
 ZEND_METHOD(Text, toUpper);
+ZEND_METHOD(Text, getByteCount);
 
 
 static const zend_function_entry class_Text_methods[] = {
@@ -47,6 +51,7 @@ static const zend_function_entry class_Text_methods[] = {
 	ZEND_ME(Text, split, arginfo_class_Text_split, ZEND_ACC_PUBLIC)
 	ZEND_ME(Text, toLower, arginfo_class_Text_toLower, ZEND_ACC_PUBLIC)
 	ZEND_ME(Text, toUpper, arginfo_class_Text_toUpper, ZEND_ACC_PUBLIC)
+	ZEND_ME(Text, getByteCount, arginfo_class_Text_getByteCount, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };
 

@@ -645,6 +645,30 @@ PHP_METHOD(Text, toUpper)
 	php_text_attach_collation(Z_PHPTEXT_P(return_value), Z_PHPTEXT_P(ZEND_THIS)->collation_name);
 }
 
+/* Text::getByteCount() */
+
+PHP_METHOD(Text, getByteCount)
+{
+	UErrorCode error = U_ZERO_ERROR;
+	char       dummy_dest[1];
+	int32_t    length;
+
+	u_strToUTF8(
+		dummy_dest, 0, &length,
+		PHP_ICU_TEXT_VAL(Z_PHPTEXT_P(ZEND_THIS)->txt),
+		PHP_ICU_TEXT_LEN(Z_PHPTEXT_P(ZEND_THIS)->txt),
+		&error
+	);
+
+	if (error == U_ZERO_ERROR || error == U_BUFFER_OVERFLOW_ERROR || error == U_STRING_NOT_TERMINATED_WARNING) {
+		RETURN_LONG(length);
+	}
+
+	zend_value_error(u_errorName(error));
+	RETURN_THROWS();
+}
+
+
 /****************************************************************************
  * Extension Plumbing
  */

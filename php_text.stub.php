@@ -17,4 +17,6 @@ final class Text
 	public function toLower() : Text {}
 
 	public function toUpper() : Text {}
+
+	public function getByteCount() : int {}
 }
