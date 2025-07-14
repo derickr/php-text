@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: b4d1463cbe302ae6c7077d566daabc2f9a40be1d */
+ * Stub hash: c0ce0d9d087eefc34b50e3c00e9a530774cf7c23 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Text___construct, 0, 0, 1)
 	ZEND_ARG_OBJ_TYPE_MASK(0, text, Text, MAY_BE_STRING, NULL)
@@ -16,7 +16,7 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Text_join, 0, 2, Text, 0)
 	ZEND_ARG_OBJ_TYPE_MASK(0, elements, Traversable, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_TYPE_MASK(0, separator, Text, MAY_BE_STRING, NULL)
-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, collation, IS_STRING, 0, "NULL")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, collation, IS_STRING, 1, "NULL")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Text_split, 0, 1, IS_ARRAY, 0)
