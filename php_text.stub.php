@@ -22,4 +22,8 @@ final class Text
 	public function toUpper() : Text {}
 
 	public function getByteCount() : int {}
+	public function getCharacterCount() : int {}
+
+	/** @implementation-alias Text::getCharacterCount */
+	public function length() : int {}
 }

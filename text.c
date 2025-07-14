@@ -677,6 +677,13 @@ PHP_METHOD(Text, getByteCount)
 	RETURN_THROWS();
 }
 
+/* Text::getCharacterCount() */
+
+PHP_METHOD(Text, getCharacterCount)
+{
+	RETURN_LONG(php_icu_text_char_count(Z_PHPTEXT_P(ZEND_THIS)->txt, Z_PHPTEXT_P(ZEND_THIS)->collation_name));
+}
+
 /* Text::* — containment checks */
 
 PHP_METHOD(Text, contains)
