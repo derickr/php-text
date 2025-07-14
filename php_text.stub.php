@@ -14,6 +14,9 @@ final class Text
 
 	public function split(string|Text $subString, int $limit = PHP_INT_MAX) : array {}
 
+	public function contains(string|Text $needle) : bool {}
+	public function startsWith(string|Text $needle) : bool {}
+
 	public function toLower() : Text {}
 
 	public function toUpper() : Text {}

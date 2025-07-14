@@ -24,6 +24,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Text_split, 0, 1, IS_ARRAY
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, limit, IS_LONG, 0, "PHP_INT_MAX")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Text_contains, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, needle, Text, MAY_BE_STRING, NULL)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Text_startsWith arginfo_class_Text_contains
+
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Text_toLower, 0, 0, Text, 0)
 ZEND_END_ARG_INFO()
 
@@ -32,16 +38,16 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Text_getByteCount, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
 
-
 ZEND_METHOD(Text, __construct);
 ZEND_METHOD(Text, __toString);
 ZEND_METHOD(Text, concat);
 ZEND_METHOD(Text, join);
 ZEND_METHOD(Text, split);
+ZEND_METHOD(Text, contains);
+ZEND_METHOD(Text, startsWith);
 ZEND_METHOD(Text, toLower);
 ZEND_METHOD(Text, toUpper);
 ZEND_METHOD(Text, getByteCount);
-
 
 static const zend_function_entry class_Text_methods[] = {
 	ZEND_ME(Text, __construct, arginfo_class_Text___construct, ZEND_ACC_PUBLIC)
@@ -49,6 +55,8 @@ static const zend_function_entry class_Text_methods[] = {
 	ZEND_ME(Text, concat, arginfo_class_Text_concat, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Text, join, arginfo_class_Text_join, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Text, split, arginfo_class_Text_split, ZEND_ACC_PUBLIC)
+	ZEND_ME(Text, contains, arginfo_class_Text_contains, ZEND_ACC_PUBLIC)
+	ZEND_ME(Text, startsWith, arginfo_class_Text_startsWith, ZEND_ACC_PUBLIC)
 	ZEND_ME(Text, toLower, arginfo_class_Text_toLower, ZEND_ACC_PUBLIC)
 	ZEND_ME(Text, toUpper, arginfo_class_Text_toUpper, ZEND_ACC_PUBLIC)
 	ZEND_ME(Text, getByteCount, arginfo_class_Text_getByteCount, ZEND_ACC_PUBLIC)
@@ -60,8 +68,7 @@ static zend_class_entry *register_class_Text(void)
 	zend_class_entry ce, *class_entry;
 
 	INIT_CLASS_ENTRY(ce, "Text", class_Text_methods);
-	class_entry = zend_register_internal_class_ex(&ce, NULL);
-	class_entry->ce_flags |= ZEND_ACC_FINAL;
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
 
 	return class_entry;
 }

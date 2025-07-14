@@ -9,7 +9,10 @@
 
 #include "Zend/zend_interfaces.h"
 
+#include "unicode/uclean.h"
 #include "unicode/unorm2.h"
+#include "unicode/usearch.h"
+#include "unicode/utypes.h"
 
 #ifdef COMPILE_DL_TEXT
 ZEND_GET_MODULE(text)
@@ -672,6 +675,81 @@ PHP_METHOD(Text, getByteCount)
 
 	zend_value_error(u_errorName(error));
 	RETURN_THROWS();
+}
+
+/* Text::* — containment checks */
+
+PHP_METHOD(Text, contains)
+{
+	zval *z_needle;
+	struct _php_icu_text *needle;
+	UErrorCode error = U_ZERO_ERROR;
+	UStringSearch *us;
+	int32_t position;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(z_needle)
+	ZEND_PARSE_PARAMETERS_END();
+
+	needle = php_icu_text_ctor_from_zval_argument(1, z_needle, NULL);
+
+	us = usearch_open(
+		PHP_ICU_TEXT_VAL(needle), PHP_ICU_TEXT_LEN(needle), // pattern
+		PHP_ICU_TEXT_VAL(Z_PHPTEXT_P(ZEND_THIS)->txt), PHP_ICU_TEXT_LEN(Z_PHPTEXT_P(ZEND_THIS)->txt), // string
+		Z_PHPTEXT_P(ZEND_THIS)->collation_name,
+		NULL,
+		&error
+	);
+
+	if (error != U_ZERO_ERROR && error != U_USING_FALLBACK_WARNING) {
+		php_icu_text_dtor(needle);
+		zend_value_error(u_errorName(error));
+		RETURN_THROWS();
+	}
+
+	position = usearch_first(us, &error);
+
+	php_icu_text_dtor(needle);
+	RETURN_BOOL(position != USEARCH_DONE);
+}
+
+PHP_METHOD(Text, startsWith)
+{
+	zval *z_needle;
+	struct _php_icu_text *needle;
+	UErrorCode error = U_ZERO_ERROR;
+	UStringSearch *us;
+	int32_t position;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(z_needle)
+	ZEND_PARSE_PARAMETERS_END();
+
+	needle = php_icu_text_ctor_from_zval_argument(1, z_needle, NULL);
+	if (PHP_ICU_TEXT_LEN(needle) <= 0) {
+		zend_argument_error(NULL, 1, "must be a non-empty string or Text object");
+		php_icu_text_dtor(needle);
+		RETURN_THROWS();
+	}
+
+	us = usearch_open(
+		PHP_ICU_TEXT_VAL(needle), PHP_ICU_TEXT_LEN(needle), // pattern
+		PHP_ICU_TEXT_VAL(Z_PHPTEXT_P(ZEND_THIS)->txt), PHP_ICU_TEXT_LEN(Z_PHPTEXT_P(ZEND_THIS)->txt), // string
+		Z_PHPTEXT_P(ZEND_THIS)->collation_name,
+		NULL,
+		&error
+	);
+
+	if (error != U_ZERO_ERROR && error != U_USING_FALLBACK_WARNING) {
+		php_icu_text_dtor(needle);
+		zend_value_error(u_errorName(error));
+		RETURN_THROWS();
+	}
+
+	position = usearch_first(us, &error);
+
+	php_icu_text_dtor(needle);
+	RETURN_BOOL(position == 0);
 }
 
 
