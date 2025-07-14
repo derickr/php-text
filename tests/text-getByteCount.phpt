@@ -1,5 +1,5 @@
 --TEST--
-Text::toUpper
+Text::getByteCount
 --EXTENSIONS--
 text
 --FILE--
