@@ -484,6 +484,8 @@ PHP_METHOD(Text, join)
 	context.collation_name = NULL;
 
 	if (!context.separator) {
+		php_icu_text_dtor(context.separator);
+		php_icu_text_dtor(context.text);
 		RETURN_THROWS();
 	}
 
@@ -495,6 +497,7 @@ PHP_METHOD(Text, join)
 
 	if (context.error) {
 		php_icu_text_dtor(context.separator);
+		php_icu_text_dtor(context.text);
 		RETURN_THROWS();
 	}
 
@@ -532,6 +535,9 @@ PHP_METHOD(Text, split)
 	ZEND_PARSE_PARAMETERS_END();
 
 	separator = php_icu_text_ctor_from_zval_argument(1, z_separator, NULL);
+	if (!separator) {
+		RETURN_THROWS();
+	}
 
 	p1 = PHP_ICU_TEXT_VAL(Z_PHPTEXT_P(ZEND_THIS)->txt);
 	endp = p1 + PHP_ICU_TEXT_LEN(Z_PHPTEXT_P(ZEND_THIS)->txt);
