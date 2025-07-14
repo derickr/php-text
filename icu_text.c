@@ -1,5 +1,6 @@
 #include "php.h"
 #include "unicode/unorm2.h"
+#include "unicode/usearch.h"
 
 #include "php_text.h"
 #include "icu_text.h"
@@ -171,4 +172,38 @@ void php_icu_text_dtor(struct _php_icu_text *t)
 		efree(t->tval);
 		efree(t);
 	}
+}
+
+zend_long php_icu_text_char_count(struct _php_icu_text *t, const char *collation_name)
+{
+	UErrorCode error = U_ZERO_ERROR;
+	int32_t    length = 0;
+	UBreakIterator *iter;
+
+	if (t->size_cache != PHP_ICU_TEXT_CACHE_NOVALUE) {
+		return t->size_cache;
+	}
+
+	iter = ubrk_open(
+		UBRK_CHARACTER,
+		collation_name,
+		PHP_ICU_TEXT_VAL(t), PHP_ICU_TEXT_LEN(t),
+		&error
+	);
+
+	if (error == U_BUFFER_OVERFLOW_ERROR || error == U_STRING_NOT_TERMINATED_WARNING) {
+		ubrk_close(iter);
+		zend_value_error(u_errorName(error));
+
+		return PHP_ICU_TEXT_CACHE_NOVALUE;
+	}
+
+	while (ubrk_next(iter) != UBRK_DONE) {
+		length++;
+	}
+
+	ubrk_close(iter);
+
+	t->size_cache = length;
+	return length;
 }
